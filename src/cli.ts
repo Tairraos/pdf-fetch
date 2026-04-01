@@ -5,7 +5,7 @@
 
 import { Command } from "commander";
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -101,6 +101,21 @@ function parsePagesSpec(spec: string): number[] {
 
   // 去重 + 排序（保证输出顺序稳定）
   return Array.from(new Set(pages)).sort((a, b) => a - b);
+}
+
+/**
+ * 读取当前包版本号（用于 -v/--version 以及运行时展示）。
+ * @returns {string} 版本号（读取失败则返回 unknown）
+ */
+function getPackageVersion(): string {
+  try {
+    const pkgPath = path.resolve(__dirname, "..", "package.json");
+    const raw = readFileSync(pkgPath, "utf8");
+    const pkg = JSON.parse(raw) as { version?: string };
+    return pkg.version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 /**
@@ -233,11 +248,13 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  const version = getPackageVersion();
   const program = new Command();
 
   program
     .name("pdf-fetch")
     .description("从 PDF 中提取页面并保存为 JPG（依赖 ImageMagick：magick）")
+    .version(version, "-v, --version", "显示版本号")
     .argument("<pdf>", "PDF 文件路径")
     .option("-d, --dpi <number>", "分辨率（DPI），默认 150", "150")
     .option("-q, --quality <number>", "JPG 质量，默认 95", "95")
@@ -262,6 +279,7 @@ async function main(): Promise<void> {
   }
   if (!opts.name || opts.name.trim().length === 0) throw new Error("name 不能为空。");
 
+  console.log(`pdf-fetch v${version}`);
   await run(inputPdf, {
     dpi,
     quality,

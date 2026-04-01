@@ -1,4 +1,4 @@
-# pdf-fetch（CLI：pdf2jpg）
+# pdf-fetch（CLI：pdf-fetch）
 
 一个简单的命令行工具：使用 **ImageMagick（magick）** 从 PDF 中提取页面并导出为 JPG。
 
@@ -18,25 +18,25 @@ pnpm add -g pdf-fetch
 无参数时会输出中文使用说明：
 
 ```bash
-pdf2jpg
+pdf-fetch
 ```
 
 转换整个 PDF：
 
 ```bash
-pdf2jpg "name.pdf"
+pdf-fetch "name.pdf"
 ```
 
 指定分辨率/质量：
 
 ```bash
-pdf2jpg "name.pdf" -d 200 -q 100
+pdf-fetch "name.pdf" -d 200 -q 100
 ```
 
 指定输出文件名前缀 + 指定页码：
 
 ```bash
-pdf2jpg "name.pdf" -n "new" -p 10-15,20
+pdf-fetch "name.pdf" -n "new" -p 10-15,20
 ```
 
 ## 行为规则

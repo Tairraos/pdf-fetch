@@ -1,5 +1,5 @@
 /**
- * pdf2jpg CLI 入口
+ * pdf-fetch CLI 入口
  * 功能：使用已安装的 ImageMagick（magick）从 PDF 中提取页面并保存为 JPG。
  */
 
@@ -26,7 +26,7 @@ type Options = {
 function printChineseUsage(): void {
   const text = `
 用法：
-  pdf2jpg "文件.pdf" [选项]
+  pdf-fetch "文件.pdf" [选项]
 
 说明：
   - 在 PDF 所在目录创建同名文件夹（去掉 .pdf 扩展名）
@@ -43,9 +43,9 @@ function printChineseUsage(): void {
                          -p 10-15,20      第 10-15 页和第 20 页
 
 示例：
-  pdf2jpg "name.pdf"
-  pdf2jpg "name.pdf" -d 200 -q 100
-  pdf2jpg "name.pdf" -n "new" -p 10-15,20
+  pdf-fetch "name.pdf"
+  pdf-fetch "name.pdf" -d 200 -q 100
+  pdf-fetch "name.pdf" -n "new" -p 10-15,20
 `;
   console.log(text.trim());
 }
@@ -236,7 +236,7 @@ async function main(): Promise<void> {
   const program = new Command();
 
   program
-    .name("pdf2jpg")
+    .name("pdf-fetch")
     .description("从 PDF 中提取页面并保存为 JPG（依赖 ImageMagick：magick）")
     .argument("<pdf>", "PDF 文件路径")
     .option("-d, --dpi <number>", "分辨率（DPI），默认 150", "150")

@@ -10,7 +10,14 @@ const prettier = require("eslint-config-prettier");
 module.exports = [
   // 说明：配置文件本身不参与 lint，避免 Node/CommonJS 全局变量报错
   {
-    ignores: ["dist/**", "node_modules/**", "eslint.config.js", "prettier.config.cjs"],
+    ignores: [
+      "dist/**",
+      "node_modules/**",
+      "eslint.config.js",
+      "prettier.config.cjs",
+      "scripts/**",
+      "tsup.config.ts",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

@@ -21,6 +21,12 @@ pnpm add -g pdf-fetch
 pdf-fetch
 ```
 
+合并图片目录为 PDF（与导出相反）：
+
+```bash
+pdf-fetch -m "./name"
+```
+
 转换整个 PDF：
 
 ```bash
@@ -47,6 +53,7 @@ pdf-fetch "name.pdf" -n "new" -p 10-15,20
 - 默认 JPG 质量：95（`-q 100` 可改）
 - 默认文件名：`p01.jpg, p02.jpg ...`，序号从 `01` 开始（支持 `-n` 修改前缀，例如 `new01.jpg`）
 - 如果目标 JPG 文件已存在：**报错退出**（符合你的覆盖策略要求）
+- 合并模式：`-m ./name` 会按文件名顺序（如 `p01.jpg, p02.jpg ...`）合并目录内图片并生成 `./name.pdf`
 
 ## 开发
 

@@ -6,7 +6,7 @@
 import { Command } from "commander";
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -26,13 +26,18 @@ type Options = {
 function printChineseUsage(): void {
   const text = `
 用法：
-  pdf-fetch "文件.pdf" [选项]
+  导出（PDF -> JPG）：
+    pdf-fetch "文件.pdf" [选项]
+
+  合并（图片目录 -> PDF）：
+    pdf-fetch -m "目录名" [选项]
 
 说明：
-  - 在 PDF 所在目录创建同名文件夹（去掉 .pdf 扩展名）
-  - 将指定页面导出为 JPG，文件名规则：前缀 + 序号（从 01 开始）
+  - 导出：在 PDF 所在目录创建同名文件夹（去掉 .pdf 扩展名），并将页面导出为 JPG
+  - 合并：按文件名顺序（如 p01.jpg, p02.jpg ...）把目录内图片合并为单个 PDF
 
 选项：
+  -m, --merge <目录>     合并模式：把目录内图片合并为 PDF（输出为：目录路径 + .pdf）
   -d, --dpi <数字>       分辨率（DPI），默认 150
   -q, --quality <数字>   JPG 质量，默认 95
   -n, --name <前缀>      文件名前缀，默认 p（示例：p01.jpg）
@@ -46,6 +51,7 @@ function printChineseUsage(): void {
   pdf-fetch "name.pdf"
   pdf-fetch "name.pdf" -d 200 -q 100
   pdf-fetch "name.pdf" -n "new" -p 10-15,20
+  pdf-fetch -m "./name"
 `;
   console.log(text.trim());
 }
@@ -180,6 +186,43 @@ async function convertSinglePageToJpg(params: {
   );
 }
 
+async function runMerge(inputDir: string): Promise<void> {
+  const dirAbsPath = path.resolve(process.cwd(), inputDir);
+  if (!existsSync(dirAbsPath)) {
+    throw new Error(`找不到目录：${inputDir}`);
+  }
+
+  const st = await stat(dirAbsPath);
+  if (!st.isDirectory()) {
+    throw new Error(`merge 参数必须是目录：${dirAbsPath}`);
+  }
+
+  await ensureMagickAvailable();
+
+  const entries = await readdir(dirAbsPath, { withFileTypes: true });
+  const images = entries
+    .filter((e) => e.isFile())
+    .map((e) => e.name)
+    .filter((name) => /\.(jpe?g|png)$/i.test(name));
+
+  if (images.length === 0) {
+    throw new Error(`目录内未找到可合并的图片（仅支持 jpg/jpeg/png）：${dirAbsPath}`);
+  }
+
+  const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
+  images.sort((a, b) => collator.compare(a, b));
+
+  const outputPdfPath = `${dirAbsPath}.pdf`;
+  if (existsSync(outputPdfPath)) {
+    throw new Error(`输出文件已存在，已按要求中止：${outputPdfPath}`);
+  }
+
+  const inputPaths = images.map((name) => path.join(dirAbsPath, name));
+  console.log(`正在合并：${inputPaths.length} 张图片 -> ${outputPdfPath}`);
+  await execFileAsync("magick", [...inputPaths, outputPdfPath], { maxBuffer: 10 * 1024 * 1024 });
+  console.log(`完成：已生成 PDF：${outputPdfPath}`);
+}
+
 /**
  * 主流程：解析参数并执行转换。
  * @param {string} inputPdf 用户输入的 PDF 路径（可相对/绝对）
@@ -253,9 +296,10 @@ async function main(): Promise<void> {
 
   program
     .name("pdf-fetch")
-    .description("从 PDF 中提取页面并保存为 JPG（依赖 ImageMagick：magick）")
+    .description("导出 PDF 页面为 JPG 或将图片目录合并为 PDF（依赖 ImageMagick：magick）")
     .version(version, "-v, --version", "显示版本号")
-    .argument("<pdf>", "PDF 文件路径")
+    .argument("[pdf]", "PDF 文件路径")
+    .option("-m, --merge <dir>", "合并模式：把目录内图片按文件名顺序合并为 PDF")
     .option("-d, --dpi <number>", "分辨率（DPI），默认 150", "150")
     .option("-q, --quality <number>", "JPG 质量，默认 95", "95")
     .option("-n, --name <string>", "输出文件名前缀，默认 p", "p")
@@ -263,13 +307,21 @@ async function main(): Promise<void> {
 
   program.parse(process.argv);
 
+  console.log(`pdf-fetch v${version}`);
+
+  const opts = program.opts<Options & { merge?: string }>();
+  if (opts.merge) {
+    if (opts.pages) throw new Error("合并模式不支持 pages 参数。");
+    await runMerge(opts.merge.trim());
+    return;
+  }
+
   const inputPdf = program.args[0] as string | undefined;
   if (!inputPdf) {
     printChineseUsage();
     process.exit(1);
   }
 
-  const opts = program.opts<Options>();
   const dpi = Number(opts.dpi);
   const quality = Number(opts.quality);
 
@@ -279,7 +331,6 @@ async function main(): Promise<void> {
   }
   if (!opts.name || opts.name.trim().length === 0) throw new Error("name 不能为空。");
 
-  console.log(`pdf-fetch v${version}`);
   await run(inputPdf, {
     dpi,
     quality,

@@ -1,7 +1,7 @@
 {
   "name": "pdf-fetch",
-  "version": "1.0.1",
-  "description": "使用 ImageMagick 将 PDF 页面批量导出为 JPG 的命令行工具（CLI 命令：pdf-fetch）",
+  "version": "1.1.0",
+  "description": "使用 ImageMagick 导出 PDF 页面为 JPG，或把图片目录合并为 PDF 的命令行工具（CLI 命令：pdf-fetch）",
   "keywords": [
     "pdf",
     "jpg",

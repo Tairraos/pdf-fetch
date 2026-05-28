@@ -38,7 +38,7 @@ function printChineseUsage(): void {
 
 选项：
   -m, --merge <目录>     合并模式：把目录内图片合并为 PDF（输出为：目录路径 + .pdf）
-  -d, --dpi <数字>       分辨率（DPI），默认 150
+  -d, --dpi <数字>       分辨率（DPI），默认 150（合并时用于将图片像素还原为 PDF 页面尺寸，建议与导出时一致）
   -q, --quality <数字>   JPG 质量，默认 95
   -n, --name <前缀>      文件名前缀，默认 p（示例：p01.jpg）
   -p, --pages <范围>     选择页面：
@@ -186,7 +186,7 @@ async function convertSinglePageToJpg(params: {
   );
 }
 
-async function runMerge(inputDir: string): Promise<void> {
+async function runMerge(inputDir: string, dpi: number): Promise<void> {
   const dirAbsPath = path.resolve(process.cwd(), inputDir);
   if (!existsSync(dirAbsPath)) {
     throw new Error(`找不到目录：${inputDir}`);
@@ -218,17 +218,45 @@ async function runMerge(inputDir: string): Promise<void> {
   }
 
   const inputPaths = images.map((name) => path.join(dirAbsPath, name));
+  const firstImagePath = inputPaths[0];
+  const { stdout: firstInfo } = await execFileAsync(
+    "magick",
+    ["identify", "-auto-orient", "-format", "%w %h", firstImagePath],
+    { maxBuffer: 10 * 1024 * 1024 }
+  );
+  const [wRaw, hRaw] = firstInfo.trim().split(/\s+/);
+  const targetWidth = Number(wRaw);
+  const targetHeight = Number(hRaw);
+  if (
+    !Number.isInteger(targetWidth) ||
+    !Number.isInteger(targetHeight) ||
+    targetWidth <= 0 ||
+    targetHeight <= 0
+  ) {
+    throw new Error(`无法读取首张图片尺寸：${firstImagePath}`);
+  }
+
   console.log(`正在合并：${inputPaths.length} 张图片 -> ${outputPdfPath}`);
   await execFileAsync(
     "magick",
     [
-      ...inputPaths,
-      "-auto-orient",
-      "+repage",
       "-units",
       "PixelsPerInch",
       "-density",
-      "72",
+      String(dpi),
+      ...inputPaths,
+      "-auto-orient",
+      "-strip",
+      "-resize",
+      `${targetWidth}x${targetHeight}!`,
+      "+repage",
+      "-set",
+      "page",
+      `${targetWidth}x${targetHeight}+0+0`,
+      "-units",
+      "PixelsPerInch",
+      "-density",
+      String(dpi),
       "-adjoin",
       outputPdfPath,
     ],
@@ -324,9 +352,12 @@ async function main(): Promise<void> {
   console.log(`pdf-fetch v${version}`);
 
   const opts = program.opts<Options & { merge?: string }>();
+  const dpi = Number(opts.dpi);
+  if (!Number.isFinite(dpi) || dpi <= 0) throw new Error("dpi 必须是大于 0 的数字。");
+
   if (opts.merge) {
     if (opts.pages) throw new Error("合并模式不支持 pages 参数。");
-    await runMerge(opts.merge.trim());
+    await runMerge(opts.merge.trim(), dpi);
     return;
   }
 
@@ -336,10 +367,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const dpi = Number(opts.dpi);
   const quality = Number(opts.quality);
 
-  if (!Number.isFinite(dpi) || dpi <= 0) throw new Error("dpi 必须是大于 0 的数字。");
   if (!Number.isFinite(quality) || quality < 1 || quality > 100) {
     throw new Error("quality 必须是 1-100 之间的数字。");
   }

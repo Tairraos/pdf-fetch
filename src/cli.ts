@@ -219,7 +219,21 @@ async function runMerge(inputDir: string): Promise<void> {
 
   const inputPaths = images.map((name) => path.join(dirAbsPath, name));
   console.log(`正在合并：${inputPaths.length} 张图片 -> ${outputPdfPath}`);
-  await execFileAsync("magick", [...inputPaths, outputPdfPath], { maxBuffer: 10 * 1024 * 1024 });
+  await execFileAsync(
+    "magick",
+    [
+      ...inputPaths,
+      "-auto-orient",
+      "+repage",
+      "-units",
+      "PixelsPerInch",
+      "-density",
+      "72",
+      "-adjoin",
+      outputPdfPath,
+    ],
+    { maxBuffer: 10 * 1024 * 1024 }
+  );
   console.log(`完成：已生成 PDF：${outputPdfPath}`);
 }
 

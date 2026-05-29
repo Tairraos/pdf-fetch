@@ -4,13 +4,19 @@
  */
 
 import { Command } from "commander";
+import { PDFDocument, PDFName } from "pdf-lib";
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const execFileAsyncBuffer = promisify(execFile) as unknown as (
+  file: string,
+  args: string[],
+  options: { maxBuffer: number; encoding: "buffer" }
+) => Promise<{ stdout: Buffer; stderr: Buffer }>;
 
 type Options = {
   dpi: number;
@@ -34,7 +40,7 @@ function printChineseUsage(): void {
 
 说明：
   - 导出：在 PDF 所在目录创建同名文件夹（去掉 .pdf 扩展名），并将页面导出为 JPG
-  - 合并：按文件名顺序（如 p01.jpg, p02.jpg ...）把目录内图片合并为单个 PDF
+  - 合并：按文件名顺序（如 p01.jpg, p02.jpg ...）把目录内图片合并为单个 PDF（以 p01.jpg 尺寸为基准，并写入首页缩略图）
 
 选项：
   -m, --merge <目录>     合并模式：把目录内图片合并为 PDF（输出为：目录路径 + .pdf）
@@ -186,6 +192,28 @@ async function convertSinglePageToJpg(params: {
   );
 }
 
+async function addFirstPageThumbnailToPdf(params: {
+  pdfPath: string;
+  thumbnailSourcePath: string;
+}): Promise<void> {
+  const { stdout: thumbJpg } = await execFileAsyncBuffer(
+    "magick",
+    [params.thumbnailSourcePath, "-auto-orient", "-thumbnail", "256x256", "-strip", "jpg:-"],
+    { maxBuffer: 10 * 1024 * 1024, encoding: "buffer" }
+  );
+
+  const pdfBytes = readFileSync(params.pdfPath);
+  const pdfDoc = await PDFDocument.load(pdfBytes);
+  const thumbImage = await pdfDoc.embedJpg(thumbJpg);
+
+  const pages = pdfDoc.getPages();
+  if (pages.length === 0) throw new Error("生成的 PDF 没有页面，无法写入缩略图。");
+
+  pages[0].node.set(PDFName.of("Thumb"), thumbImage.ref);
+  const outBytes = await pdfDoc.save();
+  writeFileSync(params.pdfPath, outBytes);
+}
+
 async function runMerge(inputDir: string, dpi: number): Promise<void> {
   const dirAbsPath = path.resolve(process.cwd(), inputDir);
   if (!existsSync(dirAbsPath)) {
@@ -217,11 +245,13 @@ async function runMerge(inputDir: string, dpi: number): Promise<void> {
     throw new Error(`输出文件已存在，已按要求中止：${outputPdfPath}`);
   }
 
+  const refName = images.find((name) => /^p0*1\.(jpe?g|png)$/i.test(name)) ?? images[0];
+  const refPath = path.join(dirAbsPath, refName);
   const inputPaths = images.map((name) => path.join(dirAbsPath, name));
-  const firstImagePath = inputPaths[0];
+
   const { stdout: firstInfo } = await execFileAsync(
     "magick",
-    ["identify", "-auto-orient", "-format", "%w %h", firstImagePath],
+    ["identify", "-auto-orient", "-format", "%w %h", refPath],
     { maxBuffer: 10 * 1024 * 1024 }
   );
   const [wRaw, hRaw] = firstInfo.trim().split(/\s+/);
@@ -233,7 +263,7 @@ async function runMerge(inputDir: string, dpi: number): Promise<void> {
     targetWidth <= 0 ||
     targetHeight <= 0
   ) {
-    throw new Error(`无法读取首张图片尺寸：${firstImagePath}`);
+    throw new Error(`无法读取参考图片尺寸：${refPath}`);
   }
 
   console.log(`正在合并：${inputPaths.length} 张图片 -> ${outputPdfPath}`);
@@ -262,6 +292,7 @@ async function runMerge(inputDir: string, dpi: number): Promise<void> {
     ],
     { maxBuffer: 10 * 1024 * 1024 }
   );
+  await addFirstPageThumbnailToPdf({ pdfPath: outputPdfPath, thumbnailSourcePath: refPath });
   console.log(`完成：已生成 PDF：${outputPdfPath}`);
 }
 
